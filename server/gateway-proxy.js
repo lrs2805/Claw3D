@@ -243,12 +243,31 @@ function createGatewayProxy(options) {
         return;
       }
 
-      const baseConnectFrame = browserHasAuth
-        ? frame
-        : {
-            ...frame,
-            params: injectAuthToken(frame.params, upstreamToken),
-          };
+      // PATCH (Phisom/Torque): sempre que o Studio host tiver token do gateway,
+      // injeta-o no connect upstream e usa autenticacao SO por token.
+      // A auth por "device" do browser NAO serve para o gateway OpenClaw
+      // (fecha com 1008 token_missing) e um device que nao bata certo fecha
+      // com DEVICE_AUTH_DEVICE_ID_MISMATCH.
+      let baseConnectFrame = frame;
+      if (upstreamToken) {
+        const injected = injectAuthToken(frame.params, upstreamToken);
+        delete injected.device;
+        if (isObject(injected.auth)) {
+          delete injected.auth.deviceToken;
+          delete injected.auth.password;
+        }
+        // PATCH (Phisom/Torque): o gateway SO mantem os scopes pedidos quando
+        // reconhece o cliente como Control UI (isOperatorUiClient =>
+        // allowBypass/dangerouslyDisableDeviceAuth). O escritorio manda
+        // client.id="webchat-ui", que NAO e reconhecido como Control UI =>
+        // scopes zerados ("missing scope: operator.read"). Forcamos a
+        // identidade de Control UI em troca do token injetado server-side.
+        const c = isObject(injected.client) ? { ...injected.client } : {};
+        c.id = "openclaw-control-ui";
+        c.mode = "webchat";
+        injected.client = c;
+        baseConnectFrame = { ...frame, params: injected };
+      }
 
       const connectParams = isObject(baseConnectFrame.params)
         ? { ...baseConnectFrame.params }
@@ -257,7 +276,13 @@ function createGatewayProxy(options) {
       const client = isObject(connectParams.client) ? { ...connectParams.client } : {};
       const clientId = typeof client.id === "string" ? client.id.trim() : "";
 
+      // PATCH (Phisom/Torque): NAO reescrever openclaw-control-ui -> webchat-ui.
+      // Senao o gateway deixa de reconhecer o cliente como Control UI
+      // (isOperatorUiClient) e LIMPA os scopes do pedido ("missing scope:
+      // operator.read") porque o caminho allowBypass/allowInsecureAuth so
+      // se aplica a Control UI. Manter openclaw-control-ui mantem os scopes.
       if (
+        false &&
         upstreamAdapterType === "openclaw" &&
         clientId === "openclaw-control-ui" &&
         !hasDeviceAuth

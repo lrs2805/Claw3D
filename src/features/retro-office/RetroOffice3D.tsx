@@ -25,7 +25,7 @@ import {
   useState,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, OrbitControls } from "@react-three/drei";
+import { Environment, Html, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { SettingsPanel } from "@/features/office/components/panels/SettingsPanel";
 import { AtmImmersiveScreen } from "@/features/office/screens/AtmImmersiveScreen";
@@ -92,6 +92,10 @@ import {
   materializeDefaults,
   type OfficeLayoutPreset,
 } from "@/features/retro-office/core/furnitureDefaults";
+import {
+  ensureOfficePhisomDepartments,
+  PHISOM_ROOM_LABELS,
+} from "@/features/retro-office/core/phisomOffice";
 import {
   clampPointToZone,
   DISTRICT_CAMERA_POSITION,
@@ -2223,14 +2227,16 @@ const buildInitialFurnitureLayout = (
 ): FurnitureItem[] =>
   ensureOfficeKanbanBoard(
     ensureOfficeJukebox(
-      ensureOfficeQaLab(
-        ensureOfficeGymRoom(
-          ensureOfficeServerRoom(
-            ensureOfficePhoneBooth(
-              ensureOfficeSmsBooth(
-                ensureOfficeAtm(
-                  ensureOfficePingPongTable(
-                    loadFurniture(storageNamespace) ?? materializeDefaults(layoutPreset),
+      ensureOfficePhisomDepartments(
+        ensureOfficeQaLab(
+          ensureOfficeGymRoom(
+            ensureOfficeServerRoom(
+              ensureOfficePhoneBooth(
+                ensureOfficeSmsBooth(
+                  ensureOfficeAtm(
+                    ensureOfficePingPongTable(
+                      loadFurniture(storageNamespace) ?? materializeDefaults(layoutPreset),
+                    ),
                   ),
                 ),
               ),
@@ -2240,6 +2246,29 @@ const buildInitialFurnitureLayout = (
       ),
     ),
   );
+
+/** Etiquetas das salas Phisom (overlay DOM dentro do Canvas 3D). */
+const PhisomRoomLabels = memo(() => (
+  <>
+    {PHISOM_ROOM_LABELS.map((room) => {
+      const [wx, , wz] = toWorld(room.x, room.y);
+      return (
+        <Html
+          key={room.key}
+          position={[wx, 0.85, wz]}
+          center
+          distanceFactor={11}
+          zIndexRange={[20, 0]}
+        >
+          <div className="pointer-events-none select-none whitespace-nowrap rounded-md border border-white/15 bg-black/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/90">
+            {room.label}
+          </div>
+        </Html>
+      );
+    })}
+  </>
+));
+PhisomRoomLabels.displayName = "PhisomRoomLabels";
 
 export function RetroOffice3D({
   agents,
@@ -5202,6 +5231,9 @@ export function RetroOffice3D({
             {/* Ensure camera looks at the active office target after mount. */}
             <CameraRig target={cameraTarget} />
             <AdaptiveDprController />
+
+            {/* Etiquetas das salas por departamento (Phisom). */}
+            {layoutPreset !== "lobby" ? <PhisomRoomLabels /> : null}
 
             {/* Orbit / pan / zoom controls — disabled while follow cam is active or while editing furniture. */}
             <OrbitControls
