@@ -262,6 +262,8 @@ const EMPTY_NUMBER_RECORD: Record<string, number> = {};
 const EMPTY_MONITOR_MAP: OfficeDeskMonitorMap = {};
 const EMPTY_CLEANING_CUES: OfficeCleaningCue[] = [];
 const EMPTY_FEED_EVENTS: FeedEvent[] = [];
+/** Movement past this slop is a camera drag, not a click on a monitor. */
+const MONITOR_OPEN_DRAG_SLOP_PX = 4;
 
 type DragState =
   | { kind: "idle" }
@@ -2763,6 +2765,15 @@ export function RetroOffice3D({
   const prevGithubViewRef = useRef<string | null>(null);
   const prevQaViewRef = useRef<string | null>(null);
   const [monitorImmersiveReady, setMonitorImmersiveReady] = useState(false);
+  const [monitorOverlayInteractive, setMonitorOverlayInteractive] =
+    useState(false);
+  const [monitorOpenAttempt, setMonitorOpenAttempt] = useState(0);
+  const pointerGestureRef = useRef({
+    down: false,
+    moved: false,
+    x: 0,
+    y: 0,
+  });
   const [activeAtmUid, setActiveAtmUid] = useState<string | null>(null);
   const [atmImmersiveReady, setAtmImmersiveReady] = useState(false);
   const [phoneBoothCommandArrived, setPhoneBoothCommandArrived] =
@@ -3029,7 +3040,12 @@ export function RetroOffice3D({
     },
     [],
   );
-  const monitorImmersive = Boolean(activeMonitor && monitorImmersiveReady);
+  const monitorImmersive = Boolean(
+    activeMonitor && monitorImmersiveReady && monitorOverlayInteractive,
+  );
+  const monitorOverlayPointerClass = monitorOverlayInteractive
+    ? "pointer-events-auto"
+    : "pointer-events-none";
   const serverTerminal = useMemo(
     () => furniture.find((item) => item.type === "server_terminal") ?? null,
     [furniture],
@@ -4195,22 +4211,115 @@ export function RetroOffice3D({
   ]);
 
   useEffect(() => {
+    const slopSq = MONITOR_OPEN_DRAG_SLOP_PX * MONITOR_OPEN_DRAG_SLOP_PX;
+    const onPointerDown = (event: PointerEvent) => {
+      pointerGestureRef.current = {
+        down: true,
+        moved: false,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const gesture = pointerGestureRef.current;
+      if (!gesture.down && event.buttons === 0) return;
+      gesture.down = true;
+      const dx = event.clientX - gesture.x;
+      const dy = event.clientY - gesture.y;
+      if (dx * dx + dy * dy > slopSq) gesture.moved = true;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      pointerGestureRef.current.down = event.buttons > 0;
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    window.addEventListener("pointercancel", onPointerUp, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerUp, true);
+      window.removeEventListener("pointercancel", onPointerUp, true);
+    };
+  }, []);
+
+  useEffect(() => {
     const resetTimer = window.setTimeout(() => {
       setMonitorImmersiveReady(false);
+      setMonitorOverlayInteractive(false);
     }, 0);
     if (!monitorAgentId) {
       return () => {
         window.clearTimeout(resetTimer);
       };
     }
-    const timer = window.setTimeout(() => {
+
+    // Opening the monitor unmounts the canvas. A pressed pointer in this
+    // window is a camera drag: cancel the timer and drop the preset lerp
+    // so the gesture is not stolen. Pointer capture stays off until then.
+    let settled = false;
+    let timer = 0;
+    let openFrame = 0;
+    const cancelOpen = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(openFrame);
+      cameraPresetRef.current = null;
+    };
+    const finishOpen = () => {
+      if (settled) return;
+      if (pointerGestureRef.current.down) {
+        cancelOpen();
+        return;
+      }
+      settled = true;
       setMonitorImmersiveReady(true);
+      setMonitorOverlayInteractive(true);
+    };
+    const onPointerDown = () => {
+      cancelOpen();
+    };
+    const slopSq = MONITOR_OPEN_DRAG_SLOP_PX * MONITOR_OPEN_DRAG_SLOP_PX;
+    let originX = 0;
+    let originY = 0;
+    let hasOrigin = false;
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.buttons > 0 || pointerGestureRef.current.down) {
+        cancelOpen();
+        return;
+      }
+      if (!hasOrigin) {
+        originX = event.clientX;
+        originY = event.clientY;
+        hasOrigin = true;
+        return;
+      }
+      const dx = event.clientX - originX;
+      const dy = event.clientY - originY;
+      if (dx * dx + dy * dy > slopSq) cancelOpen();
+    };
+
+    if (pointerGestureRef.current.down) {
+      cancelOpen();
+      return () => {
+        window.clearTimeout(resetTimer);
+      };
+    }
+
+    timer = window.setTimeout(() => {
+      openFrame = window.requestAnimationFrame(finishOpen);
     }, 900);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointermove", onPointerMove, true);
     return () => {
       window.clearTimeout(resetTimer);
       window.clearTimeout(timer);
+      window.cancelAnimationFrame(openFrame);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
     };
-  }, [monitorAgentId]);
+  }, [monitorAgentId, monitorOpenAttempt]);
 
   useEffect(() => {
     const resetTimer = window.setTimeout(() => {
@@ -4319,7 +4428,14 @@ export function RetroOffice3D({
     if (!monitorAgentId && prevMonitorAgentIdRef.current) {
       cameraPresetRef.current = overviewPreset;
     }
-    if (!monitorAgentId || !activeMonitorComputer) {
+    if (
+      !monitorAgentId ||
+      !activeMonitorComputer ||
+      pointerGestureRef.current.down
+    ) {
+      if (pointerGestureRef.current.down) {
+        cameraPresetRef.current = null;
+      }
       prevMonitorAgentIdRef.current = monitorAgentId;
       return;
     }
@@ -4333,7 +4449,12 @@ export function RetroOffice3D({
       zoom: 330,
     };
     prevMonitorAgentIdRef.current = monitorAgentId;
-  }, [activeMonitorComputer, monitorAgentId, overviewPreset]);
+  }, [
+    activeMonitorComputer,
+    monitorAgentId,
+    monitorOpenAttempt,
+    overviewPreset,
+  ]);
 
   useEffect(() => {
     if (activeAtmUid && !activeAtm) {
@@ -4547,6 +4668,7 @@ export function RetroOffice3D({
       if (editMode) return;
       const item = furniture.find((f) => f._uid === uid);
       if (!item) return;
+      if (item.type === "computer" && pointerGestureRef.current.moved) return;
       if (item.type !== "desk_cubicle") {
         setDeskActionUid(null);
         setDeskAssignPickerOpen(false);
@@ -4790,6 +4912,7 @@ export function RetroOffice3D({
         setActiveGithubTerminalUid(null);
         setActiveQaTerminalUid(null);
         setActiveAtmUid(null);
+        setMonitorOpenAttempt((attempt) => attempt + 1);
         onMonitorSelect?.(agentId);
         return;
       }
@@ -6535,7 +6658,9 @@ export function RetroOffice3D({
           <div className="absolute inset-y-0 right-0 w-[6vw] bg-black" />
           <div className="absolute inset-[5vh_5vw_8vh_5vw] rounded-[28px] border border-[#3a3a3a] shadow-[0_0_0_18px_rgba(8,8,8,0.96),0_0_0_22px_rgba(64,64,64,0.7),0_24px_90px_rgba(0,0,0,0.65)]" />
           <div className="absolute inset-[5.7vh_5.7vw_8.7vh_5.7vw] rounded-[18px] border border-white/8 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]" />
-          <div className="pointer-events-auto absolute inset-[5.8vh_5.8vw_8.8vh_5.8vw] overflow-hidden rounded-[16px] bg-black">
+          <div
+            className={`${monitorOverlayPointerClass} absolute inset-[5.8vh_5.8vw_8.8vh_5.8vw] overflow-hidden rounded-[16px] bg-black`}
+          >
             {activeMonitor ? (
               <MonitorImmersiveOverlay monitor={activeMonitor} />
             ) : null}
@@ -6551,7 +6676,9 @@ export function RetroOffice3D({
           </div>
           <div className="absolute bottom-[3.1vh] left-1/2 h-[1.2vh] w-[12vw] -translate-x-1/2 rounded-full bg-[#0d0d0d] shadow-[0_0_0_1px_rgba(90,90,90,0.5)]" />
           <div className="absolute bottom-[1.1vh] left-1/2 h-[2vh] w-[20vw] -translate-x-1/2 rounded-[999px] bg-[#101010] shadow-[0_0_0_1px_rgba(82,82,82,0.5)]" />
-          <div className="pointer-events-auto absolute right-[7vw] top-[7vh] flex items-center gap-3 rounded-full border border-white/10 bg-black/60 px-4 py-2 backdrop-blur-sm">
+          <div
+            className={`${monitorOverlayPointerClass} absolute right-[7vw] top-[7vh] flex items-center gap-3 rounded-full border border-white/10 bg-black/60 px-4 py-2 backdrop-blur-sm`}
+          >
             <div className="h-2 w-2 rounded-full bg-emerald-400" />
             <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/90">
               Monitor View
