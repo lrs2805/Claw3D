@@ -82,6 +82,7 @@ export const AgentModel = memo(function AgentModel({
   const leftBrowRef = useRef<THREE.Mesh>(null);
   const rightBrowRef = useRef<THREE.Mesh>(null);
   const heldPaddleRef = useRef<THREE.Group>(null);
+  const heldCueRef = useRef<THREE.Group>(null);
   const heldPaddleFaceRef = useRef<THREE.MeshStandardMaterial>(null);
   const heldCleaningToolRef = useRef<THREE.Group>(null);
   const heldCleaningHeadRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -145,7 +146,7 @@ export const AgentModel = memo(function AgentModel({
                     : workoutStyle === "box"
                       ? 0.04
                       : 0.02
-            : agent.pingPongUntil
+            : agent.pingPongUntil || agent.billiardUntil
               ? 0.08
               : 0;
     const bounce =
@@ -163,7 +164,10 @@ export const AgentModel = memo(function AgentModel({
                 : 0.02 + Math.abs(workoutPhase) * 0.04
             : 0;
     const breathe =
-      agent.state === "standing" || isWorkout || agent.pingPongUntil
+      agent.state === "standing" ||
+      isWorkout ||
+      agent.pingPongUntil ||
+      agent.billiardUntil
         ? Math.sin(frameValue * 0.03) * 0.01
         : 0;
     groupRef.current.position.y = bounce + breathe;
@@ -218,6 +222,18 @@ export const AgentModel = memo(function AgentModel({
           );
           leftArmRef.current.rotation.z = -0.58;
           leftArmRef.current.rotation.y = -0.12;
+        }
+      } else if (agent.billiardUntil) {
+        const throwPhase = (Date.now() % 3600) / 3600;
+        const throwing = throwPhase > 0.55 && throwPhase < 0.82;
+        if (throwing) {
+          const swing = Math.sin(((throwPhase - 0.55) / 0.27) * Math.PI);
+          leftArmRef.current.rotation.x = -0.35 - swing * 1.15;
+          leftArmRef.current.rotation.z = -0.25;
+        } else {
+          leftArmRef.current.rotation.x =
+            -0.85 + Math.sin(agent.frame * 0.1) * 0.22;
+          leftArmRef.current.rotation.z = -0.12;
         }
       } else if (agent.pingPongUntil) {
         leftArmRef.current.rotation.x =
@@ -278,6 +294,10 @@ export const AgentModel = memo(function AgentModel({
           rightArmRef.current.rotation.z = 0.58;
           rightArmRef.current.rotation.y = 0.12;
         }
+      } else if (agent.billiardUntil) {
+        const stroke = Math.sin(agent.frame * 0.1);
+        rightArmRef.current.rotation.x = -1.05 + stroke * 0.28;
+        rightArmRef.current.rotation.z = 0.18;
       } else if (agent.pingPongUntil) {
         rightArmRef.current.rotation.x =
           0.08 - Math.sin(agent.frame * 0.08) * 0.16;
@@ -525,6 +545,19 @@ export const AgentModel = memo(function AgentModel({
       heldPaddleFaceRef.current.color.set(
         agent.pingPongSide === 0 ? "#1f4fa8" : "#c53b30",
       );
+    }
+
+    if (heldCueRef.current) {
+      const atTable =
+        agent.billiardUntil !== undefined && agent.state !== "walking";
+      const throwPhase = (Date.now() % 3600) / 3600;
+      const throwing = throwPhase > 0.55 && throwPhase < 0.82;
+      heldCueRef.current.visible = atTable && !throwing;
+      if (atTable && !throwing) {
+        const stroke = Math.sin(agent.frame * 0.1);
+        heldCueRef.current.position.set(0.02, -0.16, 0.12);
+        heldCueRef.current.rotation.set(-1.15 + stroke * 0.18, 0.15, 0.2);
+      }
     }
 
     if (heldCleaningToolRef.current) {
@@ -819,6 +852,12 @@ export const AgentModel = memo(function AgentModel({
           <boxGeometry args={[0.05, 0.05, 0.05]} />
           <meshLambertMaterial color={skin} />
         </mesh>
+        <group ref={heldCueRef} position={[0.02, -0.16, 0.12]} visible={false}>
+          <mesh rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.008, 0.011, 0.46, 8]} />
+            <meshStandardMaterial color="#d4b483" roughness={0.42} />
+          </mesh>
+        </group>
         <group
           ref={heldPaddleRef}
           position={[-0.01, -0.21, 0.07]}

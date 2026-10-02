@@ -97,6 +97,14 @@ import {
   PHISOM_ROOM_LABELS,
 } from "@/features/retro-office/core/phisomOffice";
 import {
+  clearBilliardHold,
+  ensureOfficePhisomGameRoom,
+  maybeStartBilliardSession,
+  PHISOM_GAME_ROOM_LABEL,
+  planBilliardAssignments,
+  markBilliardCooldown,
+} from "@/features/retro-office/core/phisomFase2";
+import {
   clampPointToZone,
   DISTRICT_CAMERA_POSITION,
   DISTRICT_CAMERA_TARGET,
@@ -218,11 +226,16 @@ import {
   FollowCamController as FollowCamSystem,
 } from "@/features/retro-office/systems/cameraLighting";
 import {
+  PhisomFurnitureModel,
+  isPhisomFurnitureType,
+} from "@/features/retro-office/objects/phisomModels";
+import {
   FloorRaycaster as SceneFloorRaycaster,
   GameLoop as SceneGameLoop,
   PingPongBall as ScenePingPongBall,
   SpotlightEffect as SceneSpotlightEffect,
 } from "@/features/retro-office/systems/sceneRuntime";
+import { BilliardPlayFx as SceneBilliardPlayFx } from "@/features/retro-office/systems/phisomPlay";
 import { applyAgentCollisionBumps } from "@/features/retro-office/systems/NavigationSystem";
 import {
   HeatmapSystem as AgentHeatmapSystem,
@@ -365,6 +378,12 @@ const PALETTE: PaletteEntry[] = [
     label: "Ping Pong",
     icon: "🏓",
     defaults: { w: 100, h: 60 },
+  },
+  {
+    type: "billiard",
+    label: "Bilhar",
+    icon: "🎱",
+    defaults: { w: 100, h: 58 },
   },
   {
     type: "table_rect",
@@ -775,6 +794,18 @@ const ReadOnlyFurnitureClone = memo(function ReadOnlyFurnitureClone({
             onPointerDown={NOOP_FURNITURE_UID_HANDLER}
             onPointerOver={NOOP_FURNITURE_UID_HANDLER}
             onPointerOut={NOOP_FURNITURE_HANDLER}
+          />
+        ) : isPhisomFurnitureType(item.type) ? (
+          <PhisomFurnitureModel
+            key={item._uid}
+            item={item}
+            isSelected={false}
+            isHovered={false}
+            editMode={false}
+            onPointerDown={NOOP_FURNITURE_UID_HANDLER}
+            onPointerOver={NOOP_FURNITURE_UID_HANDLER}
+            onPointerOut={NOOP_FURNITURE_HANDLER}
+            onClick={NOOP_FURNITURE_UID_HANDLER}
           />
         ) : (
           <GenericFurnitureModel
@@ -1772,7 +1803,7 @@ function useAgentTick(
     const awayFurniture = socialFurniture.filter((item) =>
       ["couch", "couch_v", "beanbag"].includes(item.type),
     );
-    const moved = renderAgentsRef.current.map((agent) => {
+    let moved = renderAgentsRef.current.map((agent) => {
       const isJanitor = "role" in agent && agent.role === "janitor";
       if (isJanitor && agent.janitorPauseUntil !== undefined) {
         if (now < agent.janitorPauseUntil) {
@@ -1820,6 +1851,16 @@ function useAgentTick(
           targetY: agent.y,
           path: [],
           state: "standing" as const,
+          frame: agent.frame + 1,
+        };
+      }
+      if (
+        agent.billiardUntil !== undefined &&
+        (now >= agent.billiardUntil || agent.status !== "idle")
+      ) {
+        return {
+          ...agent,
+          ...clearBilliardHold(agent),
           frame: agent.frame + 1,
         };
       }
@@ -1902,6 +1943,11 @@ function useAgentTick(
             nx = agent.pingPongTargetX ?? nx;
             ny = agent.pingPongTargetY ?? ny;
             nf = agent.pingPongFacing ?? nf;
+            ns = "standing";
+          } else if (agent.billiardUntil !== undefined) {
+            nx = agent.billiardTargetX ?? nx;
+            ny = agent.billiardTargetY ?? ny;
+            nf = agent.billiardFacing ?? nf;
             ns = "standing";
           } else if (agent.status === "working") {
             if (
@@ -2175,6 +2221,14 @@ function useAgentTick(
       };
     });
 
+    const billiardPlayers = maybeStartBilliardSession(
+      moved,
+      furnitureItems,
+      now,
+      (sx, sy, tx, ty) => astar(sx, sy, tx, ty, grid),
+    );
+    if (billiardPlayers) moved = billiardPlayers;
+
     // Collision bump — when agents overlap, stop them briefly and reroute them
     // in different directions without the old hard shove.
     const movedWithCollisions = applyAgentCollisionBumps({ agents: moved, now });
@@ -2225,6 +2279,7 @@ const buildInitialFurnitureLayout = (
   storageNamespace: string,
   layoutPreset: OfficeLayoutPreset,
 ): FurnitureItem[] =>
+  ensureOfficePhisomGameRoom(
   ensureOfficeKanbanBoard(
     ensureOfficeJukebox(
       ensureOfficePhisomDepartments(
@@ -2235,7 +2290,8 @@ const buildInitialFurnitureLayout = (
                 ensureOfficeSmsBooth(
                   ensureOfficeAtm(
                     ensureOfficePingPongTable(
-                      loadFurniture(storageNamespace) ?? materializeDefaults(layoutPreset),
+                      loadFurniture(storageNamespace) ??
+                        materializeDefaults(layoutPreset),
                     ),
                   ),
                 ),
@@ -2245,12 +2301,13 @@ const buildInitialFurnitureLayout = (
         ),
       ),
     ),
+  ),
   );
 
 /** Etiquetas das salas Phisom (overlay DOM dentro do Canvas 3D). */
 const PhisomRoomLabels = memo(() => (
   <>
-    {PHISOM_ROOM_LABELS.map((room) => {
+    {[...PHISOM_ROOM_LABELS, PHISOM_GAME_ROOM_LABEL].map((room) => {
       const [wx, , wz] = toWorld(room.x, room.y);
       return (
         <Html
@@ -4579,6 +4636,51 @@ export function RetroOffice3D({
         }, 3_500);
         return;
       }
+      if (item.type === "billiard") {
+        const now = Date.now();
+        const [tableWx, , tableWz] = toWorld(
+          item.x + (item.w ?? 100) / 2,
+          item.y + (item.h ?? 58) / 2,
+        );
+        setFollowAgentId(null);
+        setActiveAtmUid(null);
+        onMonitorSelect?.(null);
+        cameraPresetRef.current = {
+          pos: [tableWx + 2.2, 2.6, tableWz + 2.0],
+          target: [tableWx, 0.42, tableWz],
+          zoom: 110,
+        };
+        const assignments = planBilliardAssignments(
+          renderAgentsRef.current,
+          item,
+          now,
+          planPath,
+        );
+        if (!assignments) return;
+        markBilliardCooldown(now);
+        const byId = new Map(assignments.map((entry) => [entry.id, entry.patch]));
+        for (const agent of renderAgentsRef.current) {
+          const patch = byId.get(agent.id);
+          if (patch) Object.assign(agent, patch);
+        }
+        setMoodByAgentId((prev) => {
+          const next = { ...prev };
+          for (const assignment of assignments) {
+            next[assignment.id] = { emoji: "🎱", ts: now };
+          }
+          return next;
+        });
+        window.setTimeout(() => {
+          setMoodByAgentId((prev) => {
+            const next = { ...prev };
+            for (const assignment of assignments) {
+              if (next[assignment.id]?.emoji === "🎱") delete next[assignment.id];
+            }
+            return next;
+          });
+        }, 3_500);
+        return;
+      }
       if (item.type === "atm") {
         setFollowAgentId(null);
         setActiveKanbanUid(null);
@@ -4777,6 +4879,7 @@ export function RetroOffice3D({
       hoveredItem.y <= 235;
     document.body.style.cursor =
       hoveredItem?.type === "pingpong" ||
+      hoveredItem?.type === "billiard" ||
       hoveredItem?.type === "atm" ||
       hoveredItem?.type === "sms_booth" ||
       hoveredItem?.type === "phone_booth" ||
@@ -5712,6 +5815,18 @@ export function RetroOffice3D({
                     onPointerOver={handleFurniturePointerOver}
                     onPointerOut={handleFurniturePointerOut}
                   />
+                ) : isPhisomFurnitureType(item.type) ? (
+                  <PhisomFurnitureModel
+                    key={item._uid}
+                    item={item}
+                    isSelected={item._uid === selectedUid}
+                    isHovered={item._uid === hoverUid}
+                    editMode={editMode}
+                    onPointerDown={handleFurniturePointerDown}
+                    onPointerOver={handleFurniturePointerOver}
+                    onPointerOut={handleFurniturePointerOut}
+                    onClick={handleDeskClick}
+                  />
                 ) : (
                   <GenericFurnitureModel
                     key={item._uid}
@@ -5787,6 +5902,7 @@ export function RetroOffice3D({
             })}
 
             <ScenePingPongBall agentsRef={renderAgentsRef} />
+            <SceneBilliardPlayFx agentsRef={renderAgentsRef} />
 
             {/* New Idea 5: Agent color trails while walking. */}
             {trailMode ? (

@@ -52,6 +52,14 @@ export type RenderAgent = SceneActor & {
   pingPongTableUid?: string;
   pingPongSide?: 0 | 1;
   pingPongPreviousWalkSpeed?: number;
+  billiardUntil?: number;
+  billiardTargetX?: number;
+  billiardTargetY?: number;
+  billiardFacing?: number;
+  billiardPartnerId?: string;
+  billiardTableUid?: string;
+  billiardSide?: 0 | 1 | 2;
+  billiardPreviousWalkSpeed?: number;
   interactionTarget?: OfficeInteractionTargetId;
   smsBoothStage?: "door_outer" | "door_inner" | "typing";
   phoneBoothStage?: "door_outer" | "door_inner" | "receiver";

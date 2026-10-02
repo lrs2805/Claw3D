@@ -42,7 +42,11 @@ export function applyAgentCollisionBumps({
       moved[i].state === "dancing"
     )
       continue;
-    if (moved[i].pingPongUntil !== undefined && moved[i].state !== "walking")
+    if (
+      (moved[i].pingPongUntil !== undefined ||
+        moved[i].billiardUntil !== undefined) &&
+      moved[i].state !== "walking"
+    )
       continue;
     if (moved[i].bumpedUntil !== undefined) continue;
     if ((moved[i].collisionCooldownUntil ?? 0) > now) continue;
