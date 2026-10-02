@@ -4254,23 +4254,24 @@ export function RetroOffice3D({
       };
     }
 
-    // Opening the monitor unmounts the canvas. A pressed pointer in this
-    // window is a camera drag: cancel the timer and drop the preset lerp
-    // so the gesture is not stolen. Pointer capture stays off until then.
+    // Opening the monitor unmounts the canvas. A drag (pointerdown / pointer-move
+    // with a button) or a pointer-move past the click slop cancels the timer
+    // so the overlay cannot steal the gesture. Pointer capture stays off until
+    // the open actually commits.
     let settled = false;
     let timer = 0;
     let openFrame = 0;
-    const cancelOpen = () => {
+    const cancelOpen = (releaseCamera: boolean) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
       window.cancelAnimationFrame(openFrame);
-      cameraPresetRef.current = null;
+      if (releaseCamera) cameraPresetRef.current = null;
     };
     const finishOpen = () => {
       if (settled) return;
       if (pointerGestureRef.current.down) {
-        cancelOpen();
+        cancelOpen(true);
         return;
       }
       settled = true;
@@ -4278,7 +4279,7 @@ export function RetroOffice3D({
       setMonitorOverlayInteractive(true);
     };
     const onPointerDown = () => {
-      cancelOpen();
+      cancelOpen(true);
     };
     const slopSq = MONITOR_OPEN_DRAG_SLOP_PX * MONITOR_OPEN_DRAG_SLOP_PX;
     let originX = 0;
@@ -4286,7 +4287,7 @@ export function RetroOffice3D({
     let hasOrigin = false;
     const onPointerMove = (event: PointerEvent) => {
       if (event.buttons > 0 || pointerGestureRef.current.down) {
-        cancelOpen();
+        cancelOpen(true);
         return;
       }
       if (!hasOrigin) {
@@ -4297,11 +4298,11 @@ export function RetroOffice3D({
       }
       const dx = event.clientX - originX;
       const dy = event.clientY - originY;
-      if (dx * dx + dy * dy > slopSq) cancelOpen();
+      if (dx * dx + dy * dy > slopSq) cancelOpen(false);
     };
 
     if (pointerGestureRef.current.down) {
-      cancelOpen();
+      cancelOpen(true);
       return () => {
         window.clearTimeout(resetTimer);
       };
