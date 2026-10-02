@@ -100,6 +100,8 @@ import {
   clearBilliardHold,
   ensureOfficePhisomGameRoom,
   ensureOfficePhisomMeetingScreens,
+  ensureOfficePhisomAquarium,
+  PHISOM_AQUARIUM_LABEL,
   maybeStartBilliardSession,
   PHISOM_GAME_ROOM_LABEL,
   planBilliardAssignments,
@@ -2280,6 +2282,7 @@ const buildInitialFurnitureLayout = (
   storageNamespace: string,
   layoutPreset: OfficeLayoutPreset,
 ): FurnitureItem[] =>
+  ensureOfficePhisomAquarium(
   ensureOfficePhisomMeetingScreens(
   ensureOfficePhisomGameRoom(
   ensureOfficeKanbanBoard(
@@ -2305,12 +2308,13 @@ const buildInitialFurnitureLayout = (
     ),
   ),
   ),
+  ),
   );
 
 /** Etiquetas das salas Phisom (overlay DOM dentro do Canvas 3D). */
 const PhisomRoomLabels = memo(() => (
   <>
-    {[...PHISOM_ROOM_LABELS, PHISOM_GAME_ROOM_LABEL].map((room) => {
+    {[...PHISOM_ROOM_LABELS, PHISOM_GAME_ROOM_LABEL, PHISOM_AQUARIUM_LABEL].map((room) => {
       const [wx, , wz] = toWorld(room.x, room.y);
       return (
         <Html

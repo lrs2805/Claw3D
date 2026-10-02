@@ -12,6 +12,7 @@ export const PHISOM_AGENDA_EMBED_URL =
  * Acrescenta à planta, de forma aditiva e idempotente:
  *  - Sala de Jogos (mesa de bilhar) no canto leste, acima das salas da Fase 1.
  *  - Ecrãs de parede na zona de reunião (Daily + Agenda).
+ *  - Aquário do Léo (vidro, sofá e mini-golfe), só dele.
  *
  * Os uids usam o prefixo `phi_`. Se o item sentinela já existir, não duplica.
  */
@@ -22,6 +23,7 @@ import type { FurnitureItem, FurnitureSeed, RenderAgent } from "./types";
 export const PHISOM_BILLIARD_UID = "phi_billiard";
 export const PHISOM_SCREEN_DAILY_UID = "phi_screen_daily";
 export const PHISOM_SCREEN_AGENDA_UID = "phi_screen_agenda";
+export const PHISOM_AQUARIUM_UID = "phi_leo_couch";
 
 export const BILLIARD_SESSION_MS = 22_000;
 export const BILLIARD_COOLDOWN_MS = 70_000;
@@ -145,6 +147,90 @@ export const ensureOfficePhisomMeetingScreens = (
 ): FurnitureItem[] => {
   if (items.some((item) => item._uid === PHISOM_SCREEN_DAILY_UID)) return items;
   return [...items, ...buildMeetingScreens()];
+};
+
+const AQUA_X = 1648;
+const AQUA_Y = 400;
+const AQUA_W = 140;
+const AQUA_H = 250;
+
+export const PHISOM_AQUARIUM_LABEL = {
+  key: "aquario",
+  label: "Aquário do Léo",
+  x: AQUA_X + AQUA_W / 2,
+  y: AQUA_Y + AQUA_H / 2,
+};
+
+const buildAquarium = (): FurnitureItem[] => {
+  const doorX = AQUA_X + (AQUA_W - DOOR_W) / 2;
+  const southY = AQUA_Y + AQUA_H - WALL_T;
+  const westSpan = doorX - AQUA_X;
+  const eastSpan = AQUA_X + AQUA_W - (doorX + DOOR_W);
+  return [
+    withUid(
+      { type: "glass_wall", x: AQUA_X, y: AQUA_Y, w: AQUA_W, h: WALL_T },
+      "phi_aqua_wall_n",
+    ),
+    withUid(
+      { type: "glass_wall", x: AQUA_X, y: southY, w: westSpan, h: WALL_T },
+      "phi_aqua_wall_s_w",
+    ),
+    withUid(
+      { type: "door", x: doorX, y: southY, w: DOOR_W, h: DOOR_T, facing: 0 },
+      "phi_aqua_door",
+    ),
+    withUid(
+      { type: "glass_wall", x: doorX + DOOR_W, y: southY, w: eastSpan, h: WALL_T },
+      "phi_aqua_wall_s_e",
+    ),
+    withUid(
+      {
+        type: "glass_wall",
+        x: AQUA_X,
+        y: AQUA_Y + WALL_T,
+        w: WALL_T,
+        h: AQUA_H - WALL_T * 2,
+      },
+      "phi_aqua_wall_w",
+    ),
+    withUid(
+      {
+        type: "glass_wall",
+        x: AQUA_X + AQUA_W - WALL_T,
+        y: AQUA_Y + WALL_T,
+        w: WALL_T,
+        h: AQUA_H - WALL_T * 2,
+      },
+      "phi_aqua_wall_e",
+    ),
+    withUid(
+      {
+        type: "floor_patch",
+        x: AQUA_X + WALL_T,
+        y: AQUA_Y + WALL_T,
+        w: AQUA_W - WALL_T * 2,
+        h: AQUA_H - WALL_T * 2,
+        color: "#7fd4e8",
+      },
+      "phi_aqua_floor",
+    ),
+    withUid(
+      { type: "couch", x: 1664, y: 424, w: 100, h: 40, facing: 0 },
+      PHISOM_AQUARIUM_UID,
+    ),
+    withUid(
+      { type: "minigolf", x: 1676, y: 500, w: 96, h: 112 },
+      "phi_minigolf",
+    ),
+    withUid({ type: "plant", x: 1748, y: 424 }, "phi_aqua_plant"),
+  ];
+};
+
+export const ensureOfficePhisomAquarium = (
+  items: FurnitureItem[],
+): FurnitureItem[] => {
+  if (items.some((item) => item._uid === PHISOM_AQUARIUM_UID)) return items;
+  return [...items, ...buildAquarium()];
 };
 
 export type BilliardSide = 0 | 1 | 2;

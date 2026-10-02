@@ -1,6 +1,6 @@
 "use client";
 
-import { Html } from "@react-three/drei";
+import { Html, Text } from "@react-three/drei";
 import { useState } from "react";
 import { SCALE } from "@/features/retro-office/core/constants";
 import { getItemRotationRadians, toWorld } from "@/features/retro-office/core/geometry";
@@ -13,7 +13,11 @@ import {
 import type { InteractiveFurnitureModelProps } from "@/features/retro-office/objects/types";
 
 export const isPhisomFurnitureType = (type: string) =>
-  type === "billiard" || type === "floor_patch" || type === "wall_screen";
+  type === "billiard" ||
+  type === "floor_patch" ||
+  type === "wall_screen" ||
+  type === "glass_wall" ||
+  type === "minigolf";
 
 const WALL_SCREENS: Record<string, { title: string; url: string; accent: string }> = {
   [PHISOM_SCREEN_DAILY_UID]: {
@@ -274,6 +278,114 @@ export function WallScreenModel({
   );
 }
 
+export function GlassWallModel({
+  item,
+}: {
+  item: InteractiveFurnitureModelProps["item"];
+}) {
+  const width = (item.w ?? 80) * SCALE;
+  const depth = Math.max((item.h ?? 8) * SCALE, 0.04);
+  const [wx, , wz] = toWorld(item.x, item.y);
+  const rotY = getItemRotationRadians(item);
+  return (
+    <group position={[wx + width / 2, 0, wz + depth / 2]} rotation={[0, rotY, 0]}>
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[width, 1, depth]} />
+        <meshStandardMaterial
+          color="#d9f7ff"
+          transparent
+          opacity={0.34}
+          roughness={0.05}
+          metalness={0.12}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh position={[0, 0.98, 0]}>
+        <boxGeometry args={[width, 0.03, depth + 0.01]} />
+        <meshStandardMaterial color="#8ec9d6" roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+export function MinigolfModel({
+  item,
+  isSelected,
+  isHovered,
+  editMode,
+  onPointerDown,
+  onPointerOver,
+  onPointerOut,
+  onClick,
+}: InteractiveFurnitureModelProps) {
+  const width = (item.w ?? 96) * SCALE;
+  const depth = (item.h ?? 112) * SCALE;
+  const [wx, , wz] = toWorld(item.x, item.y);
+  const holes = [-0.32, 0, 0.32];
+  const flags = ["#e11d48", "#facc15", "#2563eb"];
+
+  return (
+    <group
+      position={[wx, item.elevation ?? 0, wz]}
+      {...pointerHandlers(item._uid, {
+        onPointerDown,
+        onPointerOver,
+        onPointerOut,
+        onClick,
+      })}
+    >
+      <group position={[width / 2, 0, depth / 2]}>
+        <mesh position={[0, 0.025, 0]} receiveShadow>
+          <boxGeometry args={[width, 0.04, depth]} />
+          <meshStandardMaterial
+            color={isSelected ? "#86efac" : "#3f9d55"}
+            roughness={0.86}
+            emissive={isHovered && editMode ? "#4a90d9" : "#000000"}
+            emissiveIntensity={isHovered && editMode ? 0.2 : 0}
+          />
+        </mesh>
+        {holes.map((offset, index) => (
+          <group key={offset} position={[offset * width, 0.05, (index - 1) * depth * 0.22]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.045, 16]} />
+              <meshStandardMaterial color="#111827" />
+            </mesh>
+            <mesh position={[0.03, 0.16, 0]}>
+              <cylinderGeometry args={[0.006, 0.006, 0.28, 8]} />
+              <meshStandardMaterial color="#f8fafc" />
+            </mesh>
+            <mesh position={[0.07, 0.26, 0]}>
+              <boxGeometry args={[0.08, 0.045, 0.008]} />
+              <meshStandardMaterial color={flags[index] ?? "#e11d48"} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[width * 0.28, 0.08, depth * 0.28]} rotation={[0.2, 0.4, 1.1]}>
+          <cylinderGeometry args={[0.008, 0.01, 0.42, 8]} />
+          <meshStandardMaterial color="#d6d3d1" metalness={0.45} roughness={0.35} />
+        </mesh>
+        <mesh position={[width * 0.36, 0.03, depth * 0.34]}>
+          <boxGeometry args={[0.09, 0.015, 0.025]} />
+          <meshStandardMaterial color="#e7e5e4" metalness={0.5} roughness={0.3} />
+        </mesh>
+        <mesh position={[-width * 0.2, 0.04, depth * 0.1]}>
+          <sphereGeometry args={[0.02, 12, 10]} />
+          <meshStandardMaterial color="#f8fafc" />
+        </mesh>
+        <Text
+          position={[0, 0.22, -depth * 0.42]}
+          fontSize={0.07}
+          color="#0f3a4a"
+          anchorX="center"
+          anchorY="middle"
+        >
+          SÓ DO LÉO
+        </Text>
+      </group>
+    </group>
+  );
+}
+
 export function PhisomFurnitureModel(props: InteractiveFurnitureModelProps) {
   if (props.item.type === "floor_patch") {
     return <FloorPatchModel item={props.item} />;
@@ -283,6 +395,12 @@ export function PhisomFurnitureModel(props: InteractiveFurnitureModelProps) {
   }
   if (props.item.type === "wall_screen") {
     return <WallScreenModel {...props} />;
+  }
+  if (props.item.type === "glass_wall") {
+    return <GlassWallModel item={props.item} />;
+  }
+  if (props.item.type === "minigolf") {
+    return <MinigolfModel {...props} />;
   }
   return null;
 }

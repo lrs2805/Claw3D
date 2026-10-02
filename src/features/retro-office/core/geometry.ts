@@ -50,6 +50,8 @@ export const ITEM_FOOTPRINT: Record<string, [number, number]> = {
   billiard: [100, 58],
   floor_patch: [80, 80],
   wall_screen: [62, 8],
+  glass_wall: [80, WALL_THICKNESS],
+  minigolf: [96, 112],
   table_rect: [80, 40],
   coffee_machine: [32, 34],
   fridge: [40, 80],
@@ -130,6 +132,8 @@ export const ITEM_METADATA: Record<string, { blocksNavigation: boolean; navPaddi
   billiard:        { blocksNavigation: true  },
   floor_patch:     { blocksNavigation: false },
   wall_screen:     { blocksNavigation: false },
+  glass_wall:      { blocksNavigation: true, navPadding: 0 },
+  minigolf:        { blocksNavigation: true, navPadding: 0 },
   // ── storage / shelving ────────────────────────────────────────────────────
   bookshelf:       { blocksNavigation: true  },
   cabinet:         { blocksNavigation: true  },
