@@ -43,7 +43,7 @@ export const PHISOM_ROOMS: readonly PhisomRoom[] = [
   { key: "comercial", label: "Comercial & Estratégia", col: 0, row: 1, kind: "desks", agents: ["scott", "rei", "sam", "riku"] },
   { key: "financeiro", label: "Financeiro", col: 1, row: 1, kind: "desks", agents: ["yen", "fund"] },
   { key: "juridico", label: "Jurídico", col: 2, row: 1, kind: "desks", agents: ["lex"] },
-  { key: "operacoes", label: "Operações & Suporte", col: 3, row: 1, kind: "desks", agents: ["hiro", "main"] },
+  { key: "operacoes", label: "Operações & Suporte", col: 3, row: 1, kind: "desks", agents: ["hiro"] },
 ] as const;
 
 /** Caixas (centro x/z em coordenadas do canvas) para as etiquetas das salas. */
