@@ -264,6 +264,27 @@ const EMPTY_CLEANING_CUES: OfficeCleaningCue[] = [];
 const EMPTY_FEED_EVENTS: FeedEvent[] = [];
 /** Movement past this slop is a camera drag, not a click on a monitor. */
 const MONITOR_OPEN_DRAG_SLOP_PX = 4;
+/**
+ * In-world furniture that opens an immersive view (monitor/atm/phone/sms/github/
+ * qa/kanban) must be activated with a deliberate double-click. A single click
+ * only selects/roams — it must never auto-open the immersive overlay or trigger
+ * the camera fly-in (the "insane zoom" bug). Explicit UI buttons elsewhere still
+ * open these views directly.
+ */
+const IMMERSIVE_ACTIVATION_TYPES: ReadonlySet<string> = new Set([
+  "computer",
+  "atm",
+  "sms_booth",
+  "phone_booth",
+  "server_terminal",
+  "server_rack",
+  "qa_terminal",
+  "device_rack",
+  "test_bench",
+  "kanban_board",
+]);
+/** Two clicks on the same item within this window count as a double-click. */
+const IMMERSIVE_ACTIVATION_DOUBLE_CLICK_MS = 400;
 
 type DragState =
   | { kind: "idle" }
@@ -2774,6 +2795,9 @@ export function RetroOffice3D({
     x: 0,
     y: 0,
   });
+  const immersiveActivationRef = useRef<{ uid: string; ts: number } | null>(
+    null,
+  );
   const [activeAtmUid, setActiveAtmUid] = useState<string | null>(null);
   const [atmImmersiveReady, setAtmImmersiveReady] = useState(false);
   const [phoneBoothCommandArrived, setPhoneBoothCommandArrived] =
@@ -4670,6 +4694,18 @@ export function RetroOffice3D({
       const item = furniture.find((f) => f._uid === uid);
       if (!item) return;
       if (item.type === "computer" && pointerGestureRef.current.moved) return;
+      if (IMMERSIVE_ACTIVATION_TYPES.has(item.type)) {
+        const now = Date.now();
+        const last = immersiveActivationRef.current;
+        const isDoubleClick =
+          last !== null &&
+          last.uid === uid &&
+          now - last.ts <= IMMERSIVE_ACTIVATION_DOUBLE_CLICK_MS;
+        immersiveActivationRef.current = isDoubleClick
+          ? null
+          : { uid, ts: now };
+        if (!isDoubleClick) return;
+      }
       if (item.type !== "desk_cubicle") {
         setDeskActionUid(null);
         setDeskAssignPickerOpen(false);
