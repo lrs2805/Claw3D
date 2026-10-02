@@ -1,16 +1,27 @@
+/** Sala Daily embutida. O Léo pode trocar pelo link real da reunião. */
+export const PHISOM_MEETING_DAILY_URL =
+  "https://partiuportugal.daily.co/escritorio";
+
+/** Embed oficial do Google Calendar. Trocar `src` pelo ID do calendário. */
+export const PHISOM_AGENDA_EMBED_URL =
+  "https://calendar.google.com/calendar/embed?src=phisom&ctz=Europe/Lisbon";
+
 /**
  * PHISOM OFFICE — Fase 2
  *
  * Acrescenta à planta, de forma aditiva e idempotente:
  *  - Sala de Jogos (mesa de bilhar) no canto leste, acima das salas da Fase 1.
+ *  - Ecrãs de parede na zona de reunião (Daily + Agenda).
  *
- * Os uids usam o prefixo `phi_`. Se a mesa já existir, não duplica nada.
+ * Os uids usam o prefixo `phi_`. Se o item sentinela já existir, não duplica.
  */
 import { DOOR_LENGTH, DOOR_THICKNESS, WALL_THICKNESS } from "./constants";
 import { isRemoteOfficeAgentId } from "./district";
 import type { FurnitureItem, FurnitureSeed, RenderAgent } from "./types";
 
 export const PHISOM_BILLIARD_UID = "phi_billiard";
+export const PHISOM_SCREEN_DAILY_UID = "phi_screen_daily";
+export const PHISOM_SCREEN_AGENDA_UID = "phi_screen_agenda";
 
 export const BILLIARD_SESSION_MS = 22_000;
 export const BILLIARD_COOLDOWN_MS = 70_000;
@@ -116,6 +127,24 @@ export const ensureOfficePhisomGameRoom = (
 ): FurnitureItem[] => {
   if (items.some((item) => item._uid === PHISOM_BILLIARD_UID)) return items;
   return [...items, ...buildGameRoom()];
+};
+
+const buildMeetingScreens = (): FurnitureItem[] => [
+  withUid(
+    { type: "wall_screen", x: 78, y: 10, w: 62, h: 8, facing: 0 },
+    PHISOM_SCREEN_DAILY_UID,
+  ),
+  withUid(
+    { type: "wall_screen", x: 152, y: 10, w: 62, h: 8, facing: 0 },
+    PHISOM_SCREEN_AGENDA_UID,
+  ),
+];
+
+export const ensureOfficePhisomMeetingScreens = (
+  items: FurnitureItem[],
+): FurnitureItem[] => {
+  if (items.some((item) => item._uid === PHISOM_SCREEN_DAILY_UID)) return items;
+  return [...items, ...buildMeetingScreens()];
 };
 
 export type BilliardSide = 0 | 1 | 2;

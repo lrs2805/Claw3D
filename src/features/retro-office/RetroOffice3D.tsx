@@ -99,6 +99,7 @@ import {
 import {
   clearBilliardHold,
   ensureOfficePhisomGameRoom,
+  ensureOfficePhisomMeetingScreens,
   maybeStartBilliardSession,
   PHISOM_GAME_ROOM_LABEL,
   planBilliardAssignments,
@@ -2279,6 +2280,7 @@ const buildInitialFurnitureLayout = (
   storageNamespace: string,
   layoutPreset: OfficeLayoutPreset,
 ): FurnitureItem[] =>
+  ensureOfficePhisomMeetingScreens(
   ensureOfficePhisomGameRoom(
   ensureOfficeKanbanBoard(
     ensureOfficeJukebox(
@@ -2301,6 +2303,7 @@ const buildInitialFurnitureLayout = (
         ),
       ),
     ),
+  ),
   ),
   );
 
