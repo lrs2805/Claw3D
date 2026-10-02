@@ -2750,16 +2750,11 @@ export function RetroOffice3D({
     () => ({ pos: CAM_POS, target: cameraTarget, zoom: cameraZoom }),
     [CAM_POS, cameraTarget, cameraZoom]
   );
-  const canvasResetKey = useMemo(
-    () =>
-      [
-        remoteOfficeEnabled ? "remote" : "local",
-        gatewayStatus ?? "unknown",
-        String(agents.length),
-        String(officeCenterSignal),
-      ].join(":"),
-    [agents.length, gatewayStatus, officeCenterSignal, remoteOfficeEnabled],
-  );
+  // NOTE: the canvas used to be remounted (via a volatile `key`) whenever the
+  // gateway status, agent count, floor signal or remote/local mode changed. That
+  // recreated the WebGL context on every change, which lost GPU resources and left
+  // the office black after a click. The canvas is now mounted once for the life of
+  // the screen; camera/layout changes are applied imperatively below.
   // New Idea 7: heatmap mode.
   const [heatmapMode, setHeatmapMode] = useState(false);
   const [trailMode, setTrailMode] = useState(false);
@@ -5480,11 +5475,28 @@ export function RetroOffice3D({
           4. Agent components read from `renderAgentsRef` via useFrame → pure Three.js mutations.
           5. Floor/walls render immediately (no Suspense). Only GLB models are suspended.
         */}
-        {!immersiveOverlayActive ? (
-          <Canvas
-            key={canvasResetKey}
+        {/* The canvas is ALWAYS mounted (never keyed/remounted by volatile state):
+            remounting recreates the WebGL context, which loses GPU resources and can
+            leave the office black. Immersive views render as overlays on top instead
+            of unmounting the 3D scene. */}
+        <Canvas
             orthographic
             dpr={[0.85, 1.5]}
+            onCreated={({ gl }) => {
+              // Recover from GPU context loss instead of staying black.
+              const canvas = gl.domElement;
+              const onLost = (event: Event) => {
+                event.preventDefault();
+                console.warn(
+                  "[retro-office] WebGL context lost - awaiting restore",
+                );
+              };
+              const onRestored = () => {
+                console.warn("[retro-office] WebGL context restored");
+              };
+              canvas.addEventListener("webglcontextlost", onLost, false);
+              canvas.addEventListener("webglcontextrestored", onRestored, false);
+            }}
             camera={{
               position: CAM_POS,
               zoom: cameraZoom,
@@ -6143,7 +6155,6 @@ export function RetroOffice3D({
               onClick={handleFloorClick}
             />
           </Canvas>
-        ) : null}
       </div>
 
       {/* New Idea 2: Camera preset buttons — top left. */}
