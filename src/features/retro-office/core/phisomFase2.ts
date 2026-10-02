@@ -1,10 +1,10 @@
-/** Sala Daily embutida. O Léo pode trocar pelo link real da reunião. */
+/** Sala Daily embutida (sala PHISOM — privada, tornada pública para embutir). */
 export const PHISOM_MEETING_DAILY_URL =
-  "https://partiuportugal.daily.co/escritorio";
+  "https://partiuportugal.daily.co/PHISOM";
 
-/** Embed oficial do Google Calendar. Trocar `src` pelo ID do calendário. */
+/** Embed oficial do Google Calendar (calendário do Léo). */
 export const PHISOM_AGENDA_EMBED_URL =
-  "https://calendar.google.com/calendar/embed?src=phisom&ctz=Europe/Lisbon";
+  "https://calendar.google.com/calendar/embed?src=lrs2805%40gmail.com&ctz=Europe/Lisbon";
 
 /**
  * PHISOM OFFICE — Fase 2
